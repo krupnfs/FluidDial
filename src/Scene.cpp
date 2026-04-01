@@ -90,16 +90,30 @@ void dispatch_touch() {
 
     auto t = touch.getDetail();
     if (t.state != last_touch_state) {
+
         last_touch_state = t.state;
         touchX           = t.x - sprite_offset.x;
         touchY           = t.y - sprite_offset.y;
+
+#if LGFX_ESP32_3248S035
+        touchX = abs(touchX-320);
+#endif
+
+
         int delta;
         if (screen_encoder(t.x, t.y, delta) && t.state == m5::touch_state_t::touch) {
             current_scene->onEncoder(delta);
             return;
         }
         int button;
-        if (screen_button_touched(t.state == m5::touch_state_t::touch, t.x, t.y, button)) {
+
+#ifndef LGFX_ESP32_3248S035
+        bool scrBtnTouched = screen_button_touched(t.state == m5::touch_state_t::touch, t.x, t.y, button);
+#else
+        bool scrBtnTouched = screen_button_touched(t.state == m5::touch_state_t::touch, touchX, t.y, button);
+#endif
+
+        if (scrBtnTouched) {
             if (t.state == m5::touch_state_t::touch) {
                 dispatch_button(true, button);
             } else if (t.state == m5::touch_state_t::none) {

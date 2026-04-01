@@ -122,7 +122,11 @@ void init_system() {
 
     // Make an offscreen canvas that can be copied to the screen all at once
     canvas.setColorDepth(8);
+#ifndef LGFX_ESP32_3248S035
     canvas.createSprite(240, 240);  // display.width(), display.height());
+#else
+    canvas.createSprite(320, 344);
+#endif
 }
 void resetFlowControl() {
     fnc_putchar(0x11);

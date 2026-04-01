@@ -12,10 +12,15 @@ void RoundButton::show(const Point& where) {
     text(name().substr(0, 1), where, _highlighted ? MAROON : WHITE, MEDIUM);
 }
 void ImageButton::show(const Point& where) {
+#ifdef LGFX_ESP32_3248S035
+    Point whereCircle = Point(where.x, where.y - 11);
+#else
+    Point whereCircle = Point(where.x, where.y);
+#endif
     if (_highlighted) {
-        drawFilledCircle(where, _radius + 3, _disabled ? DARKGREY : _outline_color);
+        drawFilledCircle(whereCircle, _radius + 3, _disabled ? DARKGREY : _outline_color);
     } else {
-        drawFilledCircle(where, _radius - 2, _disabled ? DARKGREY : LIGHTGREY);
+        drawFilledCircle(whereCircle, _radius - 2, _disabled ? DARKGREY : LIGHTGREY);
     }
     drawPngFile(_filename, where);
 }

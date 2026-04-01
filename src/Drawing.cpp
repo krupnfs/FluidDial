@@ -176,7 +176,12 @@ void Stripe::draw(const char* center, bool highlighted) {
 }
 
 #define PUSH_BUTTON_LINE 212
+
+#ifndef LGFX_ESP32_3248S035
 #define DIAL_BUTTON_LINE 228
+#else
+#define DIAL_BUTTON_LINE 318
+#endif
 
 static int side_button_line() {
     return round_display ? PUSH_BUTTON_LINE : DIAL_BUTTON_LINE;
@@ -184,6 +189,9 @@ static int side_button_line() {
 
 // This shows on the display what the button currently do.
 void drawButtonLegends(const char* red, const char* green, const char* orange) {
+#ifdef DEBUG_TO_USB
+    Serial.println("Draw legends");
+#endif
     text(red, round_display ? 50 : 10, side_button_line(), RED, TINY, middle_left);
     text(green, display_short_side() - (round_display ? 50 : 10), side_button_line(), GREEN, TINY, middle_right);
     centered_text(orange, DIAL_BUTTON_LINE, ORANGE);
