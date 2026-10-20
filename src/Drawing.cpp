@@ -5,6 +5,10 @@
 #include "Drawing.h"
 #include "alarm.h"
 #include <map>
+#ifdef USE_WIFI
+#    include "WiFiConnection.h"
+#    include "PeerLink.h"
+#endif
 
 void drawBackground(int color) {
     canvas.fillSprite(color);
@@ -72,7 +76,7 @@ LGFX_Sprite* createPngBackground(const char* filename) {
     LGFX_Sprite* sprite = new LGFX_Sprite(&canvas);
     sprite->setColorDepth(canvas.getColorDepth());
     sprite->createSprite(canvas.width(), canvas.height());
-    sprite->drawPngFile(LittleFS, filename, 0, 0, canvas.width(), canvas.height(), 0, 0, 1.0f, 1.0f, datum_t::middle_center);
+    drawPngFile(sprite, filename, 0, 0);
     return sprite;
 }
 
@@ -118,6 +122,43 @@ void drawStatus() {
     static constexpr int width  = 140;
     static constexpr int height = 36;
 
+#ifdef USE_WIFI
+    if (state == Disconnected && !wifi_use_uart_mode()) {
+        // Not shown in UART mode — fall through to the standard N/C display.
+        int         bgColor;
+        const char* line1;
+        const char* line2;
+        if (wifi_use_espnow_mode()) {
+            bgColor = 0x1a001a;
+            line1   = "ESP-NOW";
+            if (espnow_is_reconnecting()) {
+                static const char* rc[] = { "Searching", "Searching.", "Searching..", "Searching..." };
+                line2 = rc[(millis() / 400) % 4];
+            } else {
+                line2 = espnow_is_paired() ? "Lost Signal" : "Not Paired";
+            }
+        } else if (wifi_in_ap_mode()) {
+            bgColor = 0x8400;       // dark orange
+            line1   = "AP Setup";
+            line2   = "192.168.4.1";
+        } else if (wifi_is_connected()) {
+            bgColor = YELLOW;       // WiFi up, Telnet still connecting
+            line1   = "FluidNC";
+            static const char* nc_frames[] = { "Connecting", "Connecting.", "Connecting..", "Connecting..." };
+            line2   = nc_frames[(millis() / 400) % 4];
+        } else {
+            bgColor = RED;
+            line1   = "WiFi";
+            static const char* wifi_frames[] = { "Scanning", "Scanning.", "Scanning..", "Scanning..." };
+            line2   = wifi_frames[(millis() / 400) % 4];
+        }
+        canvas.fillRoundRect((display_short_side() - width) / 2, y, width, height, 5, bgColor);
+        centered_text(line1, y + height / 2 - 4, BLACK, SMALL);
+        centered_text(line2, y + height / 2 + 12, BLACK, TINY);
+        return;
+    }
+#endif
+
     int bgColor = stateBGColors[state];
     if (bgColor != 1) {
         canvas.fillRoundRect((display_short_side() - width) / 2, y, width, height, 5, bgColor);
@@ -146,6 +187,37 @@ void drawStatusSmall(int y) {
     static constexpr int width  = 90;
     static constexpr int height = 25;
 
+#ifdef USE_WIFI
+    if (state == Disconnected && !wifi_use_uart_mode()) {
+        // Not shown in UART mode — fall through to the standard N/C display.
+        int         bgColor;
+        const char* label;
+        if (wifi_use_espnow_mode()) {
+            bgColor = 0x1a001a;
+            if (espnow_is_reconnecting()) {
+                static const char* rc[] = { "Searching", "Search.", "Search..", "Search..." };
+                label = rc[(millis() / 400) % 4];
+            } else {
+                label = espnow_is_paired() ? "ESP-NOW" : "Unpaired";
+            }
+        } else if (wifi_in_ap_mode()) {
+            bgColor = 0x8400;    // dark orange
+            label   = "AP Mode";
+        } else if (wifi_is_connected()) {
+            bgColor = YELLOW;   // WiFi up, Telnet still connecting
+            static const char* nc_frames[] = { "FluidNC", "FluidNC.", "FluidNC..", "FluidNC..." };
+            label   = nc_frames[(millis() / 400) % 4];
+        } else {
+            bgColor = RED;
+            static const char* wifi_frames[] = { "WiFi", "WiFi.", "WiFi..", "WiFi..." };
+            label   = wifi_frames[(millis() / 400) % 4];
+        }
+        canvas.fillRoundRect((display_short_side() - width) / 2, y, width, height, 5, bgColor);
+        centered_text(label, y + height / 2 + 3, BLACK, TINY);
+        return;
+    }
+#endif
+
     int bgColor = stateBGColors[state];
     if (bgColor != 1) {
         canvas.fillRoundRect((display_short_side() - width) / 2, y, width, height, 5, bgColor);
@@ -153,7 +225,8 @@ void drawStatusSmall(int y) {
     centered_text(my_state_string, y + height / 2 + 3, stateFGColors[state], SMALL);
 }
 
-Stripe::Stripe(int x, int y, int width, int height, fontnum_t font) : _x(x), _y(y), _width(width), _height(height), _font(font) {}
+Stripe::Stripe(int x, int y, int width, int height, fontnum_t font, int gap)
+    : _x(x), _width(width), _height(height), _gap(gap), _y(y), _font(font) {}
 
 void Stripe::draw(char left, const char* right, bool highlighted, int left_color) {
     char t[2] = { left, '\0' };
@@ -197,14 +270,13 @@ void drawButtonLegends(const char* red, const char* green, const char* orange) {
     centered_text(orange, DIAL_BUTTON_LINE, ORANGE);
 }
 
-void putDigit(int& n, int x, int y, int color) {
+void putDigit(int& n, int x, int y, int color, fontnum_t font = MEDIUM) {
     char txt[2] = { '\0', '\0' };
     txt[0]      = "0123456789"[n % 10];
     n /= 10;
-    text(txt, x, y, color, MEDIUM, middle_right);
+    text(txt, x, y, color, font, middle_right);
 }
-void fancyNumber(pos_t n, int n_decimals, int hl_digit, int x, int y, int text_color, int hl_text_color) {
-    fontnum_t font     = SMALL;
+void fancyNumber(pos_t n, int n_decimals, int hl_digit, int x, int y, int text_color, int hl_text_color, fontnum_t font = SMALL) {
     int       n_digits = n_decimals + 1;
     int       i;
     bool      isneg = n < 0;
@@ -212,12 +284,6 @@ void fancyNumber(pos_t n, int n_decimals, int hl_digit, int x, int y, int text_c
         n = -n;
     }
 #ifdef E4_POS_T
-    // in e4 format, the number always has 4 postdecimal digits,
-    // so if n_decimals is less than 4, we discard digits from
-    // the right.  We could do this by computing a divisor
-    // based on e4_power10(4 - n_decimals), but the expected
-    // number of iterations of this loop is max 4, typically 2,
-    // so that is hardly worthwhile.
     for (i = 4; i > n_decimals; --i) {
         if (i == (n_decimals + 1)) {  // Round
             n += 5;
@@ -229,36 +295,36 @@ void fancyNumber(pos_t n, int n_decimals, int hl_digit, int x, int y, int text_c
         n *= 10;
     }
 #endif
-    const int char_width = 20;
+    const int char_width = (font == TINY ? 10 : (font == SMALL ? 14 : 20));
 
     int ni = (int)n;
     for (i = 0; i < n_decimals; i++) {
-        putDigit(ni, x, y, i == hl_digit ? hl_text_color : text_color);
+        putDigit(ni, x, y, i == hl_digit ? hl_text_color : text_color, font);
         x -= char_width;
     }
     if (n_decimals) {
-        text(".", x - 10, y, text_color, MEDIUM, middle_center);
+        text(".", x - char_width / 2, y, text_color, font, middle_center);
         x -= char_width;
     }
     do {
-        putDigit(ni, x, y, i++ == hl_digit ? hl_text_color : text_color);
+        putDigit(ni, x, y, i++ == hl_digit ? hl_text_color : text_color, font);
         x -= char_width;
     } while (ni || i <= hl_digit);
     if (isneg) {
-        text("-", x, y, text_color, MEDIUM, middle_right);
+        text("-", x, y, text_color, font, middle_right);
     }
 }
 
 void DRO::drawHoming(int axis, bool highlight, bool homed) {
-    text(axisNumToCStr(axis), text_left_x(), text_middle_y(), myLimitSwitches[axis] ? GREEN : YELLOW, MEDIUM, middle_left);
-    fancyNumber(myAxes[axis], num_digits(), -1, text_right_x(), text_middle_y(), highlight ? (homed ? GREEN : RED) : DARKGREY, RED);
+    text(axisNumToCStr(axis), text_left_x(), text_middle_y(), myLimitSwitches[axis] ? GREEN : YELLOW, _font, middle_left);
+    fancyNumber(myAxes[axis], num_digits(), -1, text_right_x(), text_middle_y(), highlight ? (homed ? GREEN : RED) : DARKGREY, RED, _font);
     advance();
 }
 
 void DRO::draw(int axis, int hl_digit, bool highlight) {
-    text(axisNumToCStr(axis), text_left_x(), text_middle_y(), highlight ? GREEN : DARKGREY, MEDIUM, middle_left);
+    text(axisNumToCStr(axis), text_left_x(), text_middle_y(), highlight ? GREEN : DARKGREY, _font, middle_left);
     fancyNumber(
-        myAxes[axis], num_digits(), hl_digit, text_right_x(), text_middle_y(), highlight ? WHITE : DARKGREY, highlight ? RED : DARKGREY);
+        myAxes[axis], num_digits(), hl_digit, text_right_x(), text_middle_y(), highlight ? WHITE : DARKGREY, highlight ? RED : DARKGREY, _font);
     advance();
 }
 
@@ -275,7 +341,102 @@ void drawMenuTitle(const char* name) {
     centered_text(name, 12);
 }
 
+#ifdef USE_WIFI
+void drawWiFiSignalBars(int x0, int y_bot) {
+    int bars;
+    int bar_color;
+
+    if (wifi_use_espnow_mode()) {
+        bars      = espnow_signal_bars();
+        bar_color = 0xcc66ff;
+        if (bars == 0) return;
+    } else {
+        if (!wifi_is_connected()) return;
+        bars      = wifi_signal_bars();
+        bar_color = GREEN;
+    }
+
+    static constexpr int W   = 3;
+    static constexpr int GAP = 2;
+    static const     int H[] = { 4, 7, 10, 13 };   // heights: weak → strong
+
+    for (int i = 0; i < 4; i++) {
+        int color = (i < bars) ? bar_color : DARKGREY;
+        canvas.fillRect(x0 + i * (W + GAP), y_bot - H[i], W, H[i], color);
+    }
+}
+#endif
+
+#if defined(USE_M5) || defined(USE_LOVYANGFX)
+void drawBatteryLevel(int x0, int y_bot) {
+    int level = battery_level();
+    if (level < 0) return;
+
+    constexpr int W  = 20;
+    constexpr int H  = 13;
+    constexpr int NW = 4;
+    constexpr int NH = 7;
+
+    bool charging = battery_charging();
+
+    int fill_w, fill_color;
+    if (level >= 75) {
+        fill_w = W - 2;
+        fill_color = GREEN;
+    } else if (level >= 50) {
+        fill_w = (W - 2) / 2;
+        fill_color = GREEN;
+    } else if (level >= 25) {
+        fill_w = (W - 2) / 4;
+        fill_color = YELLOW;
+    } else {
+        fill_w = 2;
+        fill_color = RED;
+    }
+    if (charging) fill_color = BLACK;
+
+    // Body outline and nub
+    canvas.drawRect(x0, y_bot - H, W, H, WHITE);
+    canvas.fillRect(x0 + W, y_bot - (H + NH) / 2, NW, NH, WHITE);
+
+    // Level fill
+    if (fill_w > 0) {
+        canvas.fillRect(x0 + 1, y_bot - H + 1, fill_w, H - 2, fill_color);
+    }
+
+    // Lightning bolt overlay when charging
+    if (charging) {
+        int bx = x0 + W / 2;
+        int by = y_bot - (H + 1) / 2;  // vertical center
+        canvas.fillTriangle(bx + 3, by - 4, bx - 1, by, bx + 3, by, GREEN);
+        canvas.fillTriangle(bx - 3, by, bx + 1, by, bx - 3, by + 4, GREEN);
+    }
+}
+#endif
+
+#if defined(USE_M5) || defined(USE_LOVYANGFX)
+static void drawBatteryLevelOverlay() {
+    if (round_display) return;   // M5 Dial: battery indicator only shown in menu scene
+    int level = battery_level();
+    if (level < 0) return;
+    drawBatteryLevel(display_short_side() - 29, 20);
+}
+#endif
+
+#ifdef USE_WIFI
+static void drawWiFiSignalOverlay() {
+    if (round_display) return;   // M5 Dial: WiFi indicator only shown in menu scene
+    drawWiFiSignalBars(5, 20);
+}
+#endif
+
 void refreshDisplay() {
+#ifdef USE_WIFI
+    drawWiFiSignalOverlay();
+#endif
+#if defined(USE_M5) || defined(USE_LOVYANGFX)
+    drawBatteryLevelOverlay();
+#endif
     display.startWrite();
     canvas.pushSprite(sprite_offset.x, sprite_offset.y);
     display.endWrite();

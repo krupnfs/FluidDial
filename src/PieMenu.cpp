@@ -70,8 +70,26 @@ int PieMenu::touchedItem(int x, int y) {
 }
 void PieMenu::menuBackground() {
     background();
-    text(selectedItem()->name(), { 0, -15 }, WHITE, SMALL);
-    drawStatusSmall(90);
+    text(selectedItem()->name(), { 0, round_display ? -20 : -15 }, WHITE, SMALL);
+    drawStatusSmall(round_display ? 95 : 90);
+#if defined(USE_WIFI) || defined(USE_M5)
+    if (round_display) {
+        constexpr int wifi_w = 18, batt_w = 24, gap = 5;
+#    if defined(USE_WIFI) && defined(USE_M5)
+        bool has_battery = battery_level() >= 0;
+        int  total_w     = wifi_w + (has_battery ? gap + batt_w : 0);
+        int  x           = (display_short_side() - total_w) / 2;
+        drawWiFiSignalBars(x, 87);
+        if (has_battery) {
+            drawBatteryLevel(x + wifi_w + gap, 87);
+        }
+#    elif defined(USE_WIFI)
+        drawWiFiSignalBars((display_short_side() - wifi_w) / 2, 87);
+#    else
+        drawBatteryLevel((display_short_side() - batt_w) / 2, 87);
+#    endif
+    }
+#endif
 }
 
 void PieMenu::onTouchFlick() {

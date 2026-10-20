@@ -2,6 +2,7 @@
 // Use of this source code is governed by a GPLv3 license that can be found in the LICENSE file.
 
 #include "Scene.h"
+#include "ConfirmScene.h"
 
 extern Scene menuScene;
 
@@ -22,6 +23,17 @@ public:
     StatusScene() : Scene("Status") {}
 
     void onExit() override {}
+
+    void onEntry(void* arg) override {
+        // Returned from ConfirmScene — execute the deferred soft reset.
+        if (arg && strcmp((const char*)arg, "Confirmed") == 0) {
+            dbg_printf("StatusScene: sending Ctrl-X soft reset\r\n");
+            fnc_realtime(Reset);
+            schedule_action([]() { send_line("$X"); });
+        } else {
+            dbg_printf("StatusScene: onEntry arg=%s\r\n", arg ? (const char*)arg : "null");
+        }
+    }
 
     void onDialButtonPress() {
         if (state == Cycle || state == Hold) {
@@ -61,9 +73,8 @@ public:
         switch (state) {
             case Alarm:
                 if (alarm_is_critical()) {
-                    // Critical alarm that must be hard-cleared with a CTRL-X reset
-                    // since streaming execution of GCode is blocked
-                    fnc_realtime(Reset);
+                    // Soft reset loses work offsets — ask the user to confirm first.
+                    push_scene(&confirmScene, (void*)"Soft Reset?\nOffsets will be lost");
                 } else {
                     // Non-critical alarm that can be soft-cleared
                     send_line("$X");
@@ -78,11 +89,6 @@ public:
         }
     }
 
-    bool alarm_is_homing() { return lastAlarm == 14 || (lastAlarm >= 6 && lastAlarm <= 9); }
-    bool alarm_is_critical() {
-        // HardLimit or SoftLimit or SpindleControl or HardStop
-        return lastAlarm == 1 || lastAlarm == 2 || lastAlarm == 10 || lastAlarm == 13;
-    }
     void onGreenButtonPress() {
         switch (state) {
             case Cycle:
@@ -134,12 +140,23 @@ public:
         drawMenuTitle(current_scene->name());
         drawStatus();
 
-        DRO dro(16, 68, 210, 32);
-        dro.draw(0, -1, true);
-        dro.draw(1, -1, true);
-        dro.draw(2, -1, true);
+        int active_axes = (n_axes > 0 && n_axes <= 6) ? n_axes : 3;
+        int dro_height  = (active_axes <= 3) ? 32 : (active_axes == 4 ? 22 : (active_axes == 5 ? 16 : 14));
+        int dro_gap     = (active_axes <= 3) ? 33 : (active_axes == 4 ? 25 : 20);
+        int start_y     = 68;
+        if (active_axes > 3) {
+            static constexpr int list_top    = 64;
+            static constexpr int list_bottom = 178;
+            int list_height = dro_height + (active_axes - 1) * dro_gap;
+            start_y         = list_top + (list_bottom - list_top - list_height) / 2;
+        }
+        fontnum_t font  = (active_axes <= 4) ? MEDIUM : SMALL;
+        DRO dro(16, start_y, 210, dro_height, font, dro_gap);
+        for (int i = 0; i < active_axes; ++i) {
+            dro.draw(i, -1, true);
+        }
 
-        int y = 170;
+        int y = 180;
         if (state == Cycle || state == Hold) {
             int width  = 192;
             int height = 10;
@@ -162,9 +179,9 @@ public:
                 case RT_FEED_SPEED:
                     sprintf(legend, "Fd:%d Spd:%d", myFeed, mySpeed);
             }
-            centered_text(legend, y + 23);
+            centered_text(legend, y + 17);
         } else {
-            centered_text(mode_string(), y + 23, GREEN, TINY);
+            centered_text(mode_string(), y + 17, GREEN, TINY);
         }
 
         const char* encoder_button_text = "Menu";
@@ -206,6 +223,11 @@ public:
         }
         drawButtonLegends(redLabel, grnLabel, yellowLabel);
 
+#ifdef USE_WIFI
+        if (round_display) {
+            drawWiFiSignalBars(70, 20);
+        }
+#endif
         refreshDisplay();
     }
 };

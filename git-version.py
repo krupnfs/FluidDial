@@ -3,34 +3,69 @@ import filecmp, tempfile, shutil, os
 
 # Thank you https://docs.platformio.org/en/latest/projectconf/section_env_build.html !
 
+
 gitFail = False
+try:
+    subprocess.check_call(["git", "fetch", 'origin', 'refs/tags/*:refs/tags/*'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+except:
+    pass
+
 try:
     subprocess.check_call(["git", "status"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 except:
     gitFail = True
 
 if gitFail:
+    tag = "v0.0.x"
     rev = " (noGit)"
     url = " (noGit)"
 else:
-    branchname = (
-        subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"])
-        .strip()
-        .decode("utf-8")
-    )
-    revision = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).strip().decode("utf-8")
-    modified = subprocess.check_output(["git", "status", "-uno", "-s"]).strip().decode("utf-8")
-    if modified:
-        dirty = "-dirty"
-    else:
-        dirty = ""
-    rev = "%s-%s%s" % (branchname, revision, dirty)
     try:
-        url = subprocess.check_output(["git", "config", "--get", "remote.origin.url"]).strip().decode("utf-8")
+        tag = (
+            subprocess.check_output(["git", "describe", "--tags", "--abbrev=0"], stderr=subprocess.DEVNULL)
+            .strip()
+            .decode("utf-8")
+        )
+    except:
+        tag = "v0.0.x"
+
+    # Check to see if the head commit exactly matches a tag.
+    # If so, the revision is "release", otherwise it is BRANCH-COMMIT
+    try:
+        subprocess.check_call(["git", "describe", "--tags", "--exact"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        rev = ''
+    except:
+        branchname = (
+            subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+            .strip()
+            .decode("utf-8")
+        )
+        revision = (
+            subprocess.check_output(["git", "rev-parse", "--short", "HEAD"])
+            .strip()
+            .decode("utf-8")
+        )
+        modified = (
+            subprocess.check_output(["git", "status", "-uno", "-s"])
+            .strip()
+            .decode("utf-8")
+        )
+        if modified:
+            dirty = "-dirty"
+        else:
+            dirty = ""
+        rev = "%s-%s%s" % (branchname, revision, dirty)
+
+    try:
+        url = (
+            subprocess.check_output(["git", "config", "--get", "remote.origin.url"])
+            .strip()
+            .decode("utf-8")
+        )
     except:
         url = "None"
 
-git_info = rev
+git_info = '%s%s' % (tag, rev)
 git_url = url
 
 provisional = "src/version.cxx"
@@ -52,19 +87,3 @@ else:
     # so we can just leave the old version.cpp in place and get
     # rid of version.cxx
     os.remove(provisional)
-
-Import("env")
-
-#print()
-cmd = '$PYTHONEXE $UPLOADER --chip esp32s3 merge_bin --output $BUILD_DIR/merged-flash.bin --flash_mode dio --flash_size 8MB '
-for image in env.get("FLASH_EXTRA_IMAGES", []):
-    cmd += image[0] + " " + env.subst(image[1]) + " "
-cmd += " 0x10000 $BUILD_DIR/firmware.bin 0x670000 $BUILD_DIR/littlefs.bin"
-#print(cmd)
-#print()
-env.AddCustomTarget(
-    "buildall",
-    ["$BUILD_DIR/firmware.bin", "$BUILD_DIR/littlefs.bin"],
-    cmd
-    #"$PYTHONEXE $UPLOADER --chip esp32s3 merge_bin --output $BUILD_DIR/merged-flash.bin --flash_mode dio --flash_size 8MB 0x0000 $BUILD_DIR/bootloader.bin 0x8000 $BUILD_DIR/partitions.bin 0xe000 C:/Users/wmb/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin 0x10000 $BUILD_DIR/firmware.bin 0x670000 $BUILD_DIR/littlefs.bin"
-)

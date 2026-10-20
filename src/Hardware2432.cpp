@@ -24,6 +24,18 @@ LGFX         xdisplay;
 LGFX_Device& display = xdisplay;
 LGFX_Sprite  canvas(&xdisplay);
 
+#ifdef CYD_BATTERY_ADC
+#    ifndef CYD_BATTERY_ADC_PIN
+#        define CYD_BATTERY_ADC_PIN GPIO_NUM_39
+#    endif
+#    ifndef CYD_BATTERY_ADC_MULTIPLIER_NUM
+#        define CYD_BATTERY_ADC_MULTIPLIER_NUM 1534
+#    endif
+#    ifndef CYD_BATTERY_ADC_MULTIPLIER_DEN
+#        define CYD_BATTERY_ADC_MULTIPLIER_DEN 1000
+#    endif
+#endif
+
 int red_button_pin   = -1;
 int dial_button_pin  = -1;
 int green_button_pin = -1;
@@ -97,6 +109,8 @@ Layout layouts[] = {
 #endif
 };
 // clang-format on
+
+int num_layouts = sizeof(layouts)/sizeof(layouts[0]);
 
 Layout* layout;
 int     layout_num = 0;
@@ -360,3 +374,114 @@ void update_events() {
 void ackBeep() {}
 
 void deep_sleep(int us) {}
+
+void reinit_fnc_uart() {
+    init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
+}
+
+void show_logo() {
+    display.clear();
+    display.drawPngFile(
+#ifndef LGFX_ESP32_3248S035
+        LittleFS, "/fluid_dial.png", sprite_offset.x, sprite_offset.y, sprite_wh, sprite_wh, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+#else
+        LittleFS, "/fluid_dial.png", sprite_offset.x, sprite_offset.y, sprite_w, sprite_h, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+#endif
+    for (int i = 0; i < 3; i++) {
+        drawButton(i);
+    }
+}
+
+int battery_adc_millivolts() {
+#ifdef CYD_BATTERY_ADC
+    return analogReadMilliVolts(CYD_BATTERY_ADC_PIN);
+#else
+    return -1;
+#endif
+}
+
+int battery_millivolts() {
+#ifdef CYD_BATTERY_ADC
+    int mv = battery_adc_millivolts();
+    if (mv < 0) {
+        return -1;
+    }
+    return (mv * CYD_BATTERY_ADC_MULTIPLIER_NUM) / CYD_BATTERY_ADC_MULTIPLIER_DEN;
+#else
+    return -1;
+#endif
+}
+
+int battery_level() {
+    static int      cached_level  = -1;
+    static int      smoothed_mv   = -1;
+    static uint32_t next_read_ms  = 0;
+
+#ifdef CYD_BATTERY_ADC
+    uint32_t now = millis();
+    if (now < next_read_ms) {
+        return cached_level;
+    }
+    next_read_ms = now + 1000;
+
+    int millivolts = battery_millivolts();
+    if (millivolts < 3000 || millivolts > 4400) {
+        return cached_level;
+    }
+
+    if (millivolts > 4250) {
+        cached_level = 100;
+        return cached_level;
+    }
+
+    smoothed_mv = (smoothed_mv < 3000) ? millivolts : (smoothed_mv * 3 + millivolts) / 4;
+    millivolts  = smoothed_mv;
+
+    struct LevelPoint {
+        int mv;
+        int pct;
+    };
+    static constexpr LevelPoint curve[] = {
+        { 4050, 100 },
+        { 3800, 75 },
+        { 3700, 50 },
+        { 3600, 25 },
+        { 3300, 0 },
+    };
+
+    if (millivolts >= curve[0].mv) {
+        cached_level = 100;
+        return cached_level;
+    }
+    for (size_t i = 1; i < sizeof(curve) / sizeof(curve[0]); ++i) {
+        if (millivolts >= curve[i].mv) {
+            int high_mv  = curve[i - 1].mv;
+            int low_mv   = curve[i].mv;
+            int high_pct = curve[i - 1].pct;
+            int low_pct  = curve[i].pct;
+            cached_level = low_pct + ((millivolts - low_mv) * (high_pct - low_pct)) / (high_mv - low_mv);
+            return cached_level;
+        }
+    }
+
+    cached_level = 0;
+    return cached_level;
+#else
+    return -1;
+#endif
+}
+
+bool battery_charging() {
+#ifdef CYD_BATTERY_ADC
+    static int      cached       = -1;
+    static uint32_t next_read_ms = 0;
+    uint32_t        now          = millis();
+    if (cached < 0 || now >= next_read_ms) {
+        cached       = (battery_millivolts() > 4250) ? 1 : 0;
+        next_read_ms = now + 1000;
+    }
+    return cached == 1;
+#else
+    return false;
+#endif
+}

@@ -5,6 +5,8 @@
 
 class ConfigItem;
 extern std::vector<ConfigItem*> configRequests;
+void service_config_requests();
+void clear_config_requests();
 
 class ConfigItem {
 private:
@@ -17,11 +19,14 @@ public:
     virtual void set(const char* s) = 0;
     const char*  name() { return _name; }
     bool         known() { return _known; }
-    void         init() {
-        _known = false;
-        configRequests.push_back(this);
-        send_line(_name);
+    void         send_request() {
+        const char* p = _name;
+        while (*p) {
+            fnc_putchar(*p++);
+        }
+        fnc_putchar('\n');
     }
+    void init();
     void got(const char* s) {
         _known = true;
         set(s);
@@ -33,7 +38,7 @@ private:
     int _value;
 
 public:
-    IntConfigItem(const char* name) : ConfigItem(name) {}
+    IntConfigItem(const char* name) : ConfigItem(name), _value(0) {}
     int  get() { return _value; }
     void set(const char* s) { _value = atoi(s); }
 };
@@ -43,7 +48,7 @@ private:
     pos_t _value;
 
 public:
-    PosConfigItem(const char* name) : ConfigItem(name) {}
+    PosConfigItem(const char* name) : ConfigItem(name), _value(0) {}
     pos_t get() { return _value; }
     void  set(const char* s) { _value = atopos(s); }
 };
@@ -63,7 +68,7 @@ private:
     bool _value;
 
 public:
-    BoolConfigItem(const char* name) : ConfigItem(name) {}
+    BoolConfigItem(const char* name) : ConfigItem(name), _value(false) {}
     bool get() { return _value; }
     void set(const char* s) { _value = strcmp(s, "true") == 0; }
 };

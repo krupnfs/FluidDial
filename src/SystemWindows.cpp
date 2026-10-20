@@ -46,11 +46,14 @@ void delay_ms(uint32_t ms) {
 }
 
 void drawPngFile(const char* filename, int x, int y) {
+    drawPngFile(&canvas, filename, x, y);
+}
+void drawPngFile(LGFX_Sprite* sprite, const char* filename, int x, int y) {
     std::string fn("data/");
     fn += filename;
     // When datum is middle_center, the origin is the center of the canvas and the
     // +Y direction is down.
-    canvas.drawPngFile(fn.c_str(), x, -y, 0, 0, 0, 0, 1.0f, 1.0f, datum_t::middle_center);
+    sprite->drawPngFile(fn.c_str(), x, -y, 0, 0, 0, 0, 1.0f, 1.0f, datum_t::middle_center);
 }
 
 #define TIOCM_LE 0x001
@@ -275,6 +278,7 @@ void init_system() {
 
 Point sprite_offset { 0, 0 };
 
+void show_logo() {}
 void base_display() {
     display.clear();
 }
@@ -282,6 +286,7 @@ void base_display() {
 void next_layout(int delta) {}
 
 void resetFlowControl() {}
+void reinit_fnc_uart() {}
 
 extern "C" void fnc_putchar(uint8_t c) {
     serial_write(hFNC, &c, 1);
@@ -295,7 +300,7 @@ extern "C" int fnc_getchar() {
 #ifdef ECHO_FNC_TO_DEBUG
         dbg_write(c);
 #endif
-        return c;
+        return observe_fnc_rx((unsigned char)c);
     }
     return -1;
 }
@@ -452,3 +457,9 @@ nvs_handle_t nvs_init(const char* name) {
 
     return strdup(dname);
 }
+
+bool ui_locked(bool redrawButtonsFlag) {
+    return false;
+}
+
+void redrawButtons() {}

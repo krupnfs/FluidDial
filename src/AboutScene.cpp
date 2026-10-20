@@ -4,6 +4,7 @@
 #include "Scene.h"
 #include "FileParser.h"
 #include "AboutScene.h"
+#include "BootLog.h"
 
 extern Scene menuScene;
 
@@ -12,12 +13,12 @@ extern const char* git_info;  // auto generated version.cpp
 static const int MIN_BRIGHTNESS = 8;
 
 void AboutScene::onEntry(void* arg) {
-    // if (initPrefs()) {
-    //     getPref("brightness", &_brightness);
-    // }
     getBrightness();
-    send_line("$G");
-    send_line("$I");
+
+    if (state != Disconnected) {
+        send_line("$G");
+        send_line("$I");
+    }
 }
 
 void AboutScene::onDialButtonPress() {
@@ -29,15 +30,21 @@ void AboutScene::onGreenButtonPress() {
 #endif
 }
 void AboutScene::onRedButtonPress() {
+#ifdef USE_M5
     set_disconnected_state();
-#ifdef ARDUINO
-    centered_text("Use red button to wakeup", 118, RED, TINY);
+#    ifdef ARDUINO
+    background();
+    centered_text("Press WAKE (M5) to wakeup", 118, RED, TINY);
     refreshDisplay();
     delay_ms(2000);
 
     deep_sleep(0);
-#else
+#    else
     dbg_println("Sleep");
+#    endif
+#else
+    next_layout(1);
+    reDisplay();
 #endif
 }
 
@@ -75,6 +82,7 @@ void AboutScene::reDisplay() {
     std::string version_str = "Ver ";
     version_str += git_info;
     centered_text(version_str.c_str(), y, LIGHTGREY, TINY);
+    refreshDisplay();
     y += 10;
 #ifdef FNC_BAUD  // FNC_BAUD might not be defined for Windows
     text("FNC baud:", key_x, y += y_spacing, LIGHTGREY, TINY, bottom_right);
@@ -104,6 +112,25 @@ void AboutScene::reDisplay() {
         }
     }
 
+    // When the link is down, surface the last few boot/handshake log lines
+    // here. UART0 is shared with the USB-serial bridge on CYD, so this is
+    // the only way to see what is happening without unplugging.
+    if (state == Disconnected) {
+        const int log_line_spacing = 10;
+        int       log_y            = y + 14;
+        centered_text("Boot log (newest first):", log_y, YELLOW, TINY);
+        const int max_lines = 6;
+        int       avail     = bootlog_count();
+        int       shown     = avail < max_lines ? avail : max_lines;
+        for (int i = 0; i < shown; i++) {
+            const char* line = bootlog_line(i);
+            if (line) {
+                log_y += log_line_spacing;
+                centered_text(line, log_y, LIGHTGREY, TINY);
+            }
+        }
+    }
+
 #ifdef ARDUINO
     const char* greenLegend = "Restart";
 #else
@@ -114,7 +141,11 @@ void AboutScene::reDisplay() {
 
     drawMenuTitle(current_scene->name());
 
+#ifdef USE_M5
     drawButtonLegends("Sleep", greenLegend, "Menu");
+#else
+    drawButtonLegends("Layout", greenLegend, "Menu");
+#endif
     drawError();  // if there is one
     refreshDisplay();
 }
