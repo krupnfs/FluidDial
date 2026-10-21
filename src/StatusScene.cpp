@@ -142,9 +142,9 @@ public:
 
         int active_axes = (n_axes > 0 && n_axes <= 6) ? n_axes : 3;
         int dro_height  = (active_axes <= 3) ? 32 : (active_axes == 4 ? 25 : (active_axes == 5 ? 16 : 14));
-        int dro_gap     = (active_axes <= 3) ? 33 : (active_axes == 4 ? 25 : 20);
+        int dro_gap     = (active_axes <= 3) ? 33 : (active_axes == 4 ? 30 : 20);
 #ifdef LGFX_ESP32_3248S035
-        int start_y     = (active_axes <= 3) ? 100 : 80;
+        int start_y     = (active_axes <= 3) ? 100 : 90;
 #else
         int start_y     = 68;
 #endif
