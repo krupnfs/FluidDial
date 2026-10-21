@@ -92,16 +92,28 @@ void TransportScene::reDisplay() {
 
     if (round_display) {
         centered_text("Transport", 18);
+#ifdef LGFX_ESP32_3248S035
+        drawRect(70, 28, 180, 1, 0, DARKGREY); 
+#else
         drawRect(70, 28, 100, 1, 0, DARKGREY);
+#endif
     } else {
         centered_text("Transport", 12);
+#ifdef LGFX_ESP32_3248S035
+        drawRect(55, 22, 210, 1, 0, DARKGREY);
+#else
         drawRect(55, 22, 130, 1, 0, DARKGREY);
+#endif
     }
 
     TransportMode cur     = wifi_get_transport();
     int           start_y = round_display ? START_Y_ROUND : START_Y_CYD;
     int           bx      = round_display ? 28 : 18;
+#ifdef LGFX_ESP32_3248S035
+    int           bw      = round_display ? 184 : 284;
+#else
     int           bw      = round_display ? 184 : 204;
+#endif
 
     for (int i = 0; i < N_TRANSPORT; i++) {
         int  y      = start_y + i * ITEM_PITCH;

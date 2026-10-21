@@ -11,7 +11,11 @@ public:
         background();
 
         if (!round_display) {
+#ifdef LGFX_ESP32_3248S035
+            drawOutlinedRect(10, 80, 300, 100, 0x001a4d, 0x4da6ff);
+#else
             drawOutlinedRect(10, 80, 230, 100, 0x001a4d, 0x4da6ff);
+#endif
         }
         size_t nl = _msg.find('\n');
         if (nl != std::string::npos) {
