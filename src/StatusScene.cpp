@@ -141,7 +141,7 @@ public:
         drawStatus();
 
         int active_axes = (n_axes > 0 && n_axes <= 6) ? n_axes : 3;
-        int dro_height  = (active_axes <= 3) ? 32 : (active_axes == 4 ? 22 : (active_axes == 5 ? 16 : 14));
+        int dro_height  = (active_axes <= 3) ? 32 : (active_axes == 4 ? 25 : (active_axes == 5 ? 16 : 14));
         int dro_gap     = (active_axes <= 3) ? 33 : (active_axes == 4 ? 25 : 20);
 #ifdef LGFX_ESP32_3248S035
         int start_y     = (active_axes <= 3) ? 100 : 80;
@@ -155,7 +155,7 @@ public:
             start_y         = list_top + (list_bottom - list_top - list_height) / 2;
         }
         fontnum_t font  = (active_axes <= 4) ? MEDIUM : SMALL;
-        DRO dro(16, start_y, 210, dro_height, font, dro_gap);
+        DRO dro(60, start_y, 210, dro_height, font, dro_gap);
         for (int i = 0; i < active_axes; ++i) {
             dro.draw(i, -1, true);
         }

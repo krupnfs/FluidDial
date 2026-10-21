@@ -297,13 +297,13 @@ public:
             int dro_height = (n <= 3) ? 32 : (n == 4 ? 25 : 18);
             int dro_gap    = (n <= 3) ? 33 : (dro_height + 5);
 #ifdef LGFX_ESP32_3248S035
-            int start_y    = (n <= 3) ? 180 : (n == 4 ? 170 : 160);
+            int start_y    = (n <= 3) ? 180 : (n == 4 ? 140 : 160);
 #else
             int start_y    = (n <= 3) ? 68 : (n == 4 ? 58 : 50);
 #endif
             fontnum_t font = (n <= 4) ? MEDIUM : SMALL;
 #ifdef LGFX_ESP32_3248S035
-            DRO dro(60, 140, 200, dro_height, font, dro_gap);
+            DRO dro(60, start_y, 210, dro_height, font, dro_gap);
 #else
             DRO dro(16, start_y, 210, dro_height, font, dro_gap);
 #endif

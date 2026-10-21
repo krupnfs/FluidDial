@@ -203,7 +203,7 @@ public:
             start_y         = list_top + (list_bottom - list_top - list_height) / 2;
         }
         fontnum_t font  = (active_axes <= 4) ? MEDIUM : SMALL;
-        DRO dro(16, start_y, 210, dro_height, font, dro_gap);
+        DRO dro(60, start_y, 210, dro_height, font, dro_gap);
 
         if (false && state == Homing) {
             for (int axis = 0; axis < active_axes; axis++) {
