@@ -19,9 +19,15 @@ extern const char* git_info;
 
 // ─── Geometry ─────────────────────────────────────────────────────────────────
 
+#ifdef LGFX_ESP32_3248S035
+static constexpr int BX = 20, BY = 28, BW = 280, BH = 34;       // status badge
+static constexpr int CX = 15, CW = 290, CH = 28, CI = 8;        // info cards
+static constexpr int SBX = 12, SBY = 160, SBW = 296, SBH = 36;  // switch button
+#else
 static constexpr int BX = 20, BY = 28, BW = 200, BH = 34;       // status badge
 static constexpr int CX = 15, CW = 210, CH = 28, CI = 8;        // info cards
 static constexpr int SBX = 12, SBY = 160, SBW = 216, SBH = 36;  // switch button
+#endif
 
 static constexpr int CARD_Y0    = 68;
 static constexpr int CARD_PITCH = CH + 4;  // 32 px per card row
@@ -130,7 +136,11 @@ void WiFiSetupScene::drawApView() {
     centered_text(wifi_ap_ssid(), y, CYAN, SMALL);
 
     y += line_height;
+#ifdef LGFX_ESP32_3248S035
+    drawRect(40, y - 2, 240, 1, 0, DARKGREY);
+#else
     drawRect(40, y - 2, 160, 1, 0, DARKGREY);  // divider
+#endif
 
     // IP section
     y += line_height + 4;
@@ -275,7 +285,11 @@ void WiFiSetupScene::drawSettingsView() {
         y += 20;
         centered_text(cfg.ssid, y, WHITE, SMALL);
         y += (round_display ? 14 : 20);
+#ifdef LGFX_ESP32_3248S035
+        drawRect(40, y, 240, 1, 0, DARKGREY);
+#else
         drawRect(40, y, 160, 1, 0, DARKGREY);
+#endif
         y += 14;
 
         if (wifi_last_error()) {
@@ -343,7 +357,11 @@ void WiFiSetupScene::reDisplay() {
         drawRect(70, 28, 100, 1, 0, DARKGREY);
     } else {
         centered_text(title, 12);
+#ifdef LGFX_ESP32_3248S035
+        drawRect(55, 22, 210, 1, 0, DARKGREY);
+#else
         drawRect(55, 22, 130, 1, 0, DARKGREY);
+#endif
     }
 
     if (wifi_in_ap_mode()) {

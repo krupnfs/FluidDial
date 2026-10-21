@@ -97,7 +97,12 @@ void SystemScene::onTouchClick() {
     int start_y   = round_display ? START_Y_ROUND   : START_Y_CYD;
     for (int i = 0; i < N_ITEMS; i++) {
         int y = start_y + i * item_pitch;
-        if (touchX >= 30 && touchX <= 210 && touchY >= y - 2 && touchY < y + item_h - 4) {
+#ifdef LGFX_ESP32_3248S035
+        if (touchX >= 30 && touchX <= 290 && touchY >= y - 2 && touchY < y + item_h - 4)
+#else
+        if (touchX >= 30 && touchX <= 210 && touchY >= y - 2 && touchY < y + item_h - 4)
+#endif
+        {
             _selected = i;
             reDisplay();
             activateSelected();
@@ -113,14 +118,22 @@ void SystemScene::reDisplay() {
 
     background();
     centered_text("Settings", 16);
+#ifndef LGFX_ESP32_3248S035
     drawRect(55, 26, 130, 1, 0, DARKGREY);
+#else
+    drawRect(55, 26, 210, 1, 0, DARKGREY);
+#endif
 
     for (int i = 0; i < N_ITEMS; i++) {
         int  y   = start_y + i * item_pitch;
         bool sel = (i == _selected);
 
         if (sel) {
+#ifndef LGFX_ESP32_3248S035
             drawOutlinedRect(30, y, 180, item_h - 4, 0x001a4d, 0x4da6ff);
+#else
+            drawOutlinedRect(30, y, 260, item_h - 4, 0x001a4d, 0x4da6ff);
+#endif
         }
 
         bool has_sub  = items[i].sublabel[0] != '\0';

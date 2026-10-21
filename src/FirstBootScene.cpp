@@ -79,10 +79,19 @@ public:
         centered_text("Setup", 16);
 
         if (round_display) {
+#ifdef LGFX_ESP32_3248S035
+            drawRect(60, 28, 200, 1, 0, DARKGREY);
+#else
             drawRect(60, 28, 120, 1, 0, DARKGREY);
+#endif
+
             centered_text("Connection Mode", 48, ORANGE, TINY);
         } else {
+#ifdef LGFX_ESP32_3248S035
+            drawRect(55, 22, 210, 1, 0, DARKGREY);
+#else
             drawRect(55, 22, 130, 1, 0, DARKGREY);
+#endif
             centered_text("Connection Mode", 44, ORANGE, SMALL);
         }
 

@@ -41,7 +41,11 @@ void OTAScene::reDisplay() {
         drawRect(70, 34, 100, 1, 0, DARKGREY);
     } else {
         centered_text("OTA Update", 12);
+#ifdef LGFX_ESP32_3248S035
+        drawRect(55, 22, 210, 1, 0, DARKGREY);
+#else
         drawRect(55, 22, 130, 1, 0, DARKGREY);
+#endif
     }
 
     int pct = wifi_ota_progress();
@@ -55,7 +59,11 @@ void OTAScene::reDisplay() {
     if (pct >= 1) {
         const char* lbl = (pct == 100) ? "Upload Done!" : "Uploading...";
         centered_text(lbl, 76, (pct == 100) ? GREEN : YELLOW, SMALL);
+#ifdef LGFX_ESP32_3248S035
+        static constexpr int BX = 30, BW = 260, BH = 16;
+#else
         static constexpr int BX = 30, BW = 180, BH = 16;
+#endif
         int by = 100;
         drawOutlinedRect(BX, by, BW, BH, 0x1a1a1a, DARKGREY);
         int fill = (BW - 4) * pct / 100;
@@ -73,7 +81,11 @@ void OTAScene::reDisplay() {
         const int LINE = 22;
         centered_text("Connect to WiFi:", y, LIGHTGREY, TINY);  y += LINE;
         centered_text(wifi_ap_ssid(),     y, CYAN,      SMALL); y += LINE;
+#ifdef LGFX_ESP32_3248S035
+        drawRect(40, y - 2, 240, 1, 0, DARKGREY);               y += LINE - 4;
+#else
         drawRect(40, y - 2, 160, 1, 0, DARKGREY);               y += LINE - 4;
+#endif
         centered_text("Open browser to:", y, LIGHTGREY, TINY);  y += LINE;
         centered_text("192.168.4.1",      y, GREEN,     SMALL); y += LINE + 4;
         drawButtonLegends("Cancel", "", "");
