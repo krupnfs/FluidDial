@@ -298,22 +298,41 @@ static void drawButtonLegendsOverlay() {
     // Clear old legends with black background on display
     display.fillRoundRect(0, y - legend_bg_height / 2, legend_bg_width, legend_bg_height, 4, BLACK);
 
+    // Button centers for 3248S035 (button_w=70, offset_x=10)
+    // Red:   center_x = 10 + 35 = 45
+    // Orange: center_x = 126 + 35 = 161
+    // Green: center_x = 242 + 35 = 277
+    const int red_center_x       = 45;
+    const int orange_center_x    = 161;
+    const int green_center_x     = 277;
+
     // Only draw if there's text to show
     // Font is already set in drawButtonLegends()
     if (s_red[0] != '\0') {
+        int tw = display.textWidth(s_red);
+        int x  = red_center_x - tw / 2;
+        // Clamp to left edge
+        if (x < 5) x = 5;
         display.setTextDatum(middle_left);
         display.setTextColor(RED);
-        display.drawString(s_red, 15, y);
-    }
-    if (s_green[0] != '\0') {
-        display.setTextDatum(middle_right);
-        display.setTextColor(GREEN);
-        display.drawString(s_green, 300, y);
+        display.drawString(s_red, x, y);
     }
     if (s_orange[0] != '\0') {
-        display.setTextDatum(middle_center);
+        int tw = display.textWidth(s_orange);
+        int x  = orange_center_x - tw / 2;
+        display.setTextDatum(middle_left);
         display.setTextColor(ORANGE);
-        display.drawString(s_orange, 160, y);
+        display.drawString(s_orange, x, y);
+    }
+    if (s_green[0] != '\0') {
+        int tw = display.textWidth(s_green);
+        int x  = green_center_x - tw / 2;
+        // Clamp to right edge
+        int max_x = 320 - tw - 5;
+        if (x > max_x) x = max_x;
+        display.setTextDatum(middle_left);
+        display.setTextColor(GREEN);
+        display.drawString(s_green, x, y);
     }
 #endif
 }
