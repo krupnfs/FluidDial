@@ -1,7 +1,8 @@
 #include "Menu.h"
 #include "PieMenu.h"
+#include "Drawing.h"
 #ifdef USE_WMB_FSS
-#    include "FileMenu.h"
+    #    include "FileMenu.h"
 #endif
 #include "System.h"
 #ifdef USE_WIFI
@@ -104,6 +105,8 @@ public:
     }
     void onEntry(void* arg) {
         PieMenu::onEntry(arg);
+        // Clear button legends when entering menu (menu doesn't use them)
+        drawButtonLegends("", "", "");
         if (state == Disconnected) {
             disableIcons();
         } else {

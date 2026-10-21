@@ -5,6 +5,13 @@
 #include "Drawing.h"
 #include "alarm.h"
 #include <map>
+
+#ifdef LGFX_ESP32_3248S035
+// Shared between drawButtonLegends and drawButtonLegendsOverlay
+static const char* s_red = "";
+static const char* s_green = "";
+static const char* s_orange = "";
+#endif
 #ifdef USE_WIFI
 #    include "WiFiConnection.h"
 #    include "PeerLink.h"
@@ -265,9 +272,50 @@ void drawButtonLegends(const char* red, const char* green, const char* orange) {
 #ifdef DEBUG_TO_USB
     Serial.println("Draw legends");
 #endif
+    // For 3248S035, store arguments and set font so it's always applied
+    // even when drawButtonLegendsOverlay() has nothing to draw
+    // to avoid sprite buffer overflow. Canvas is 320x400 but display is 320x480.
+#ifdef LGFX_ESP32_3248S035
+    s_red = red;
+    s_green = green;
+    s_orange = orange;
+    // Always set the TINY font here so it's available for overlay
+    display.setFont(&fonts::FreeSansBold9pt7b);
+#else
     text(red, round_display ? 50 : 10, side_button_line(), RED, TINY, middle_left);
     text(green, display_short_side() - (round_display ? 50 : 10), side_button_line(), GREEN, TINY, middle_right);
     centered_text(orange, DIAL_BUTTON_LINE, ORANGE);
+#endif
+}
+
+static void drawButtonLegendsOverlay() {
+#ifdef LGFX_ESP32_3248S035
+    // All legends on the same horizontal line, centered
+    int y = 380;
+    int legend_bg_width = 320;
+    int legend_bg_height = 18;
+
+    // Clear old legends with black background on display
+    display.fillRoundRect(0, y - legend_bg_height / 2, legend_bg_width, legend_bg_height, 4, BLACK);
+
+    // Only draw if there's text to show
+    // Font is already set in drawButtonLegends()
+    if (s_red[0] != '\0') {
+        display.setTextDatum(middle_left);
+        display.setTextColor(RED);
+        display.drawString(s_red, 15, y);
+    }
+    if (s_green[0] != '\0') {
+        display.setTextDatum(middle_right);
+        display.setTextColor(GREEN);
+        display.drawString(s_green, 300, y);
+    }
+    if (s_orange[0] != '\0') {
+        display.setTextDatum(middle_center);
+        display.setTextColor(ORANGE);
+        display.drawString(s_orange, 160, y);
+    }
+#endif
 }
 
 void putDigit(int& n, int x, int y, int color, fontnum_t font = MEDIUM) {
@@ -439,6 +487,9 @@ void refreshDisplay() {
 #endif
     display.startWrite();
     canvas.pushSprite(sprite_offset.x, sprite_offset.y);
+#ifdef LGFX_ESP32_3248S035
+    drawButtonLegendsOverlay();
+#endif
     display.endWrite();
 }
 
