@@ -143,7 +143,11 @@ public:
         int active_axes = (n_axes > 0 && n_axes <= 6) ? n_axes : 3;
         int dro_height  = (active_axes <= 3) ? 32 : (active_axes == 4 ? 22 : (active_axes == 5 ? 16 : 14));
         int dro_gap     = (active_axes <= 3) ? 33 : (active_axes == 4 ? 25 : 20);
+#ifdef LGFX_ESP32_3248S035
+        int start_y     = (active_axes <= 3) ? 100 : 80;
+#else
         int start_y     = 68;
+#endif
         if (active_axes > 3) {
             static constexpr int list_top    = 64;
             static constexpr int list_bottom = 178;
@@ -157,6 +161,9 @@ public:
         }
 
         int y = 180;
+#ifdef LGFX_ESP32_3248S035
+        y = 280;
+#endif
         if (state == Cycle || state == Hold) {
             int width  = 192;
             int height = 10;

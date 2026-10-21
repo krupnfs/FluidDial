@@ -199,9 +199,23 @@ public:
 
     void drawJogBg() {
         // Recreate jogbg.png with drawing primitives — faster than rendering png which was causing heap issues with WiFi and overall sluggishness :(
-        const int cx = 120, cy = 120;
+        // Adapt for screen size: 240x320 vs 320x480 (3248S035)
+#ifdef LGFX_ESP32_3248S035
+        const int canvas_w = 320;
+        const int canvas_h = 400;
+#else
+        const int canvas_w = 240;
+        const int canvas_h = 240;
+#endif
+        const int cx = canvas_w / 2;
+        const int cy = canvas_h / 2;
+#ifdef LGFX_ESP32_3248S035
+        const int R  = 140;   // outer circle radius for 320px wide
+        const int ri = 60;    // inner (center circle) radius
+#else
         const int R  = 119;   // outer circle radius
         const int ri = 50;    // inner (center circle) radius
+#endif
         const int hw = 3;     // half-width of separator bands (parallel edges)
         const uint16_t zone_color    = 0x1a4d;  // nicer blue
         const uint16_t sep_color     = 0x0000;  // black
@@ -236,7 +250,7 @@ public:
                 int opx = (int)(-sy * 0.71f * hw);
                 int opy = (int)( sx * 0.71f * hw);
                 canvas.drawLine(cx + opx, cy + opy, cx + oax + opx, cy + oay + opy, outline_color);
-                canvas.drawLine(cx - opx, cy - opy, cx + oax - opx, cy + oay - opy, outline_color);
+                canvas.drawLine(cx - opx, cy - opy, cx + oax - opx, cy + oay - py, outline_color);
             }
         }
 
@@ -260,7 +274,11 @@ public:
         drawJogBg();
         drawMenuTitle("Jog");
         if (state == Idle) {
+#ifdef LGFX_ESP32_3248S035
+            centered_text(_dynamic_mode ? "Dynamic" : "Precise", 50, 65535, TINY);
+#else
             centered_text(_dynamic_mode ? "Dynamic" : "Precise", 36, 65535, TINY);
+#endif
         } else {
             drawStatus();
         }
@@ -269,20 +287,36 @@ public:
             _cancelling = false;
         }
         if (_cancelling || _cancel_held) {
+#ifdef LGFX_ESP32_3248S035
+            centered_text("Jog Canceled", 200, RED, MEDIUM);
+#else
             centered_text("Jog Canceled", 120, RED, MEDIUM);
+#endif
         } else {
             int n          = num_axes();
             int dro_height = (n <= 3) ? 32 : (n == 4 ? 25 : 18);
             int dro_gap    = (n <= 3) ? 33 : (dro_height + 5);
+#ifdef LGFX_ESP32_3248S035
+            int start_y    = (n <= 3) ? 180 : (n == 4 ? 170 : 160);
+#else
             int start_y    = (n <= 3) ? 68 : (n == 4 ? 58 : 50);
+#endif
             fontnum_t font = (n <= 4) ? MEDIUM : SMALL;
+#ifdef LGFX_ESP32_3248S035
+            DRO dro(60, 140, 200, dro_height, font, dro_gap);
+#else
             DRO dro(16, start_y, 210, dro_height, font, dro_gap);
+#endif
             for (size_t axis = 0; axis < n; axis++) {
                 dro.draw(axis, _dist_index[axis], selected(axis));
             }
             if (state == Jog) {
                 if (!_continuous) {
+#ifdef LGFX_ESP32_3248S035
+                    centered_text("Touch to cancel jog", 380, YELLOW, TINY);
+#else
                     centered_text("Touch to cancel jog", 185, YELLOW, TINY);
+#endif
                 }
             } else {
                 std::string dialLegend("Zero");
@@ -291,7 +325,11 @@ public:
                         dialLegend += axisNumToChar(axis);
                     }
                 }
+#ifdef LGFX_ESP32_3248S035
                 drawButtonLegends("Jog-", "Jog+", dialLegend.c_str());
+#else
+                drawButtonLegends("Jog-", "Jog+", dialLegend.c_str());
+#endif
             }
         }
         refreshDisplay();

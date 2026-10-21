@@ -191,7 +191,11 @@ public:
         int active_axes = homing_axis_count();
         int dro_height  = (active_axes <= 3) ? 32 : (active_axes == 4 ? 25 : 18);
         int dro_gap     = (active_axes <= 3) ? 33 : (active_axes == 6 ? 20 : dro_height + 5);
+#ifdef LGFX_ESP32_3248S035
+        int start_y     = (active_axes <= 3) ? 100 : 80;
+#else
         int start_y     = 68;
+#endif
         if (active_axes > 3) {
             static constexpr int list_top    = 64;
             static constexpr int list_bottom = 200;
