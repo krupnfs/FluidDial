@@ -4,7 +4,12 @@
 // System interface routines for the Arduino framework
 
 #include "System.h"
+
+#ifndef LGFX_ESP32_3248S035
 #include <LGFX_AUTODETECT.hpp>
+#else
+#include <LGFX_3248S035.hpp>
+#endif
 #include "Hardware2432.hpp"
 #include "Drawing.h"
 #include "NVS.h"
@@ -19,6 +24,18 @@ LGFX         xdisplay;
 LGFX_Device& display = xdisplay;
 LGFX_Sprite  canvas(&xdisplay);
 
+#ifdef CYD_BATTERY_ADC
+#    ifndef CYD_BATTERY_ADC_PIN
+#        define CYD_BATTERY_ADC_PIN GPIO_NUM_39
+#    endif
+#    ifndef CYD_BATTERY_ADC_MULTIPLIER_NUM
+#        define CYD_BATTERY_ADC_MULTIPLIER_NUM 1534
+#    endif
+#    ifndef CYD_BATTERY_ADC_MULTIPLIER_DEN
+#        define CYD_BATTERY_ADC_MULTIPLIER_DEN 1000
+#    endif
+#endif
+
 int red_button_pin   = -1;
 int dial_button_pin  = -1;
 int green_button_pin = -1;
@@ -30,9 +47,17 @@ Stream& debugPort = Serial;
 bool round_display = false;
 
 const int n_buttons = 3;
+
+#ifndef LGFX_ESP32_3248S035
 const int button_w  = 80;
 const int button_h  = 80;
-const int sprite_wh = 240;
+const int sprite_wh = 80;
+#else
+const int button_w  = 116;
+const int button_h  = 80;
+const int sprite_w  = 320;
+const int sprite_h = 400;
+#endif
 
 int button_colors[] = { RED, YELLOW, GREEN };
 class Layout {
@@ -58,9 +83,12 @@ public:
     int  rotation() { return _rotation; }
 };
 
+
+
 // clang-format off
 Layout layouts[] = {
 // rotation  sprite_XY        button0_XY
+#ifndef LGFX_ESP32_3248S035
     { 0,     { 0, 0 },        { 0, sprite_wh } }, // Buttons above
     { 0,     { 0, button_h }, { 0, 0 }         }, // Buttons below
     { 1,     { 0, 0 },        { sprite_wh, 0 } }, // Buttons right
@@ -69,8 +97,20 @@ Layout layouts[] = {
     { 2,     { 0, button_h }, { 0, 0 }         }, // Buttons above
     { 3,     { button_w, 0 }, { 0, 0 }         }, // Buttons left
     { 3,     { 0, 0 },        { sprite_wh, 0 } }, // Buttons right
+#else
+    { 0,     { 0, 0 },        { 0, sprite_h } }, // Buttons above
+    { 0,     { 0, button_h }, { 0, 0 }         }, // Buttons below
+    { 1,     { 0, 0 },        { sprite_w, 0 } }, // Buttons right
+    { 1,     { button_w, 0 }, { 0, 0 }         }, // Buttons left
+    { 2,     { 0, 0 },        { 0, sprite_h } }, // Buttons below
+    { 2,     { 0, button_h }, { 0, 0 }         }, // Buttons above
+    { 3,     { button_w, 0 }, { 0, 0 }         }, // Buttons left
+    { 3,     { 0, 0 },        { sprite_w, 0 } }, // Buttons right
+#endif
 };
 // clang-format on
+
+int num_layouts = sizeof(layouts)/sizeof(layouts[0]);
 
 Layout* layout;
 int     layout_num = 0;
@@ -101,6 +141,7 @@ void init_hardware() {
     dial_button_pin  = -1;
     green_button_pin = -1;
 
+#ifndef LGFX_ESP32_3248S035
     lgfx::boards::board_t board_id = display.getBoard();
     switch (board_id) {
         case lgfx::boards::board_Guition_ESP32_2432W328:
@@ -130,6 +171,23 @@ void init_hardware() {
             dbg_printf("Unknown board id %d\n", board_id);
             break;
     }
+#else
+    
+    
+    enc_a = GPIO_NUM_22;
+    enc_b = GPIO_NUM_23;
+    // rotary_button_pin = GPIO_NUM_35;
+    // pinMode(rotary_button_pin, INPUT);  // Pullup does not work on GPIO35
+#ifdef CYD_BUTTONS
+    red_button_pin   = GPIO_NUM_5;   // RGB LED Red
+    dial_button_pin  = GPIO_NUM_18;  // RGB LED Blue
+    green_button_pin = GPIO_NUM_19;  // RGB LED Green
+    pinMode(red_button_pin, INPUT_PULLUP);
+    pinMode(dial_button_pin, INPUT_PULLUP);
+    pinMode(green_button_pin, INPUT_PULLUP);
+#endif
+
+#endif
     init_encoder(enc_a, enc_b);
     init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
 
@@ -144,16 +202,42 @@ void init_hardware() {
 }
 
 void drawButton(int n) {
+#ifdef DEBUG_TO_USB
+        Serial.println("Draw button");
+#endif
     Point offset = layout->buttonPosition[n];
+#ifndef LGFX_ESP32_3248S035
+    int offset_x = 10;
+    int offset_y = 10;
+    int button_h = 60;
+    int button_w = 60;
+#else
+    int offset_x = 10;
+    int offset_y = 50;
+    int button_h = 70;
+    int button_w = 70;
+#endif
     switch (n) {
         case 0:
-            display.drawPngFile(LittleFS, "/red_button.png", offset.x + 10, offset.y + 10, 60, 60, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+#ifndef LGFX_ESP32_3248S035
+            display.drawPngFile(LittleFS, "/red_button.png", offset.x + offset_x, offset.y + offset_y, button_h, button_w, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+#else
+            display.drawPngFile(LittleFS, "/red_button.png", offset.x + offset_x, offset.y, button_h, button_w, 0, 0, 0.0f, 0.0f, datum_t::bottom_left);
+#endif
             break;
         case 1:
-            display.drawPngFile(LittleFS, "/orange_button.png", offset.x + 10, offset.y + 10, 60, 60, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+#ifndef LGFX_ESP32_3248S035
+            display.drawPngFile(LittleFS, "/orange_button.png", offset.x + offset_x, offset.y + offset_y, button_h, button_w, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+#else
+            display.drawPngFile(LittleFS, "/orange_button.png", offset.x + offset_x, offset.y, button_h, button_w, 0, 0, 0.0f, 0.0f, datum_t::bottom_center);
+#endif
             break;
         case 2:
-            display.drawPngFile(LittleFS, "/green_button.png", offset.x + 10, offset.y + 10, 60, 60, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+#ifndef LGFX_ESP32_3248S035
+            display.drawPngFile(LittleFS, "/green_button.png", offset.x + offset_x, offset.y + offset_y, button_h, button_w, 0, 0, 0.0f, 0.0f, datum_t::top_left);
+#else
+            display.drawPngFile(LittleFS, "/green_button.png", offset.x + offset_x, offset.y, button_h, button_w, 0, 0, 0.0f, 0.0f, datum_t::bottom_right);
+#endif
             break;
     }
 }
@@ -161,7 +245,11 @@ void drawButton(int n) {
 void base_display() {
     display.clear();
     display.drawPngFile(
+#ifndef LGFX_ESP32_3248S035
         LittleFS, "/fluid_dial.png", sprite_offset.x, sprite_offset.y, sprite_wh, sprite_wh, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+#else
+        LittleFS, "/fluid_dial.png", sprite_offset.x, sprite_offset.y, sprite_w, sprite_h, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+#endif
     // On-screen buttons
     for (int i = 0; i < 3; i++) {
         drawButton(i);
@@ -224,16 +312,25 @@ bool screen_encoder(int x, int y, int& delta) {
 }
 
 bool in_rect(int x, int y, Point xy, Point wh) {
+
     return x >= xy.x && x < (xy.x + wh.x) && y >= xy.y && y < (xy.y + wh.y);
 }
 bool in_button_stripe(int x, int y) {
     Point xy = layout->buttonPosition[0];
     if (layout->vertical_buttons()) {
         // Vertical button layout
+#ifndef LGFX_ESP32_3248S035
         return in_rect(x, y, xy, { button_w, sprite_wh });
+#else
+        return in_rect(x, y, xy, { button_w, sprite_h });
+#endif
     }
     // Horizontal button layout
+#ifndef LGFX_ESP32_3248S035
     return in_rect(x, y, xy, { sprite_wh, button_h });
+#else
+    return in_rect(x, y, xy, { sprite_w, button_h });
+#endif
 }
 bool hit(int button_num, int x, int y) {
     return in_rect(x, y, layout->buttonPosition[button_num], { button_w, button_h });
@@ -277,3 +374,114 @@ void update_events() {
 void ackBeep() {}
 
 void deep_sleep(int us) {}
+
+void reinit_fnc_uart() {
+    init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
+}
+
+void show_logo() {
+    display.clear();
+    display.drawPngFile(
+#ifndef LGFX_ESP32_3248S035
+        LittleFS, "/fluid_dial.png", sprite_offset.x, sprite_offset.y, sprite_wh, sprite_wh, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+#else
+        LittleFS, "/fluid_dial.png", sprite_offset.x, sprite_offset.y, sprite_w, sprite_h, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+#endif
+    for (int i = 0; i < 3; i++) {
+        drawButton(i);
+    }
+}
+
+int battery_adc_millivolts() {
+#ifdef CYD_BATTERY_ADC
+    return analogReadMilliVolts(CYD_BATTERY_ADC_PIN);
+#else
+    return -1;
+#endif
+}
+
+int battery_millivolts() {
+#ifdef CYD_BATTERY_ADC
+    int mv = battery_adc_millivolts();
+    if (mv < 0) {
+        return -1;
+    }
+    return (mv * CYD_BATTERY_ADC_MULTIPLIER_NUM) / CYD_BATTERY_ADC_MULTIPLIER_DEN;
+#else
+    return -1;
+#endif
+}
+
+int battery_level() {
+    static int      cached_level  = -1;
+    static int      smoothed_mv   = -1;
+    static uint32_t next_read_ms  = 0;
+
+#ifdef CYD_BATTERY_ADC
+    uint32_t now = millis();
+    if (now < next_read_ms) {
+        return cached_level;
+    }
+    next_read_ms = now + 1000;
+
+    int millivolts = battery_millivolts();
+    if (millivolts < 3000 || millivolts > 4400) {
+        return cached_level;
+    }
+
+    if (millivolts > 4250) {
+        cached_level = 100;
+        return cached_level;
+    }
+
+    smoothed_mv = (smoothed_mv < 3000) ? millivolts : (smoothed_mv * 3 + millivolts) / 4;
+    millivolts  = smoothed_mv;
+
+    struct LevelPoint {
+        int mv;
+        int pct;
+    };
+    static constexpr LevelPoint curve[] = {
+        { 4050, 100 },
+        { 3800, 75 },
+        { 3700, 50 },
+        { 3600, 25 },
+        { 3300, 0 },
+    };
+
+    if (millivolts >= curve[0].mv) {
+        cached_level = 100;
+        return cached_level;
+    }
+    for (size_t i = 1; i < sizeof(curve) / sizeof(curve[0]); ++i) {
+        if (millivolts >= curve[i].mv) {
+            int high_mv  = curve[i - 1].mv;
+            int low_mv   = curve[i].mv;
+            int high_pct = curve[i - 1].pct;
+            int low_pct  = curve[i].pct;
+            cached_level = low_pct + ((millivolts - low_mv) * (high_pct - low_pct)) / (high_mv - low_mv);
+            return cached_level;
+        }
+    }
+
+    cached_level = 0;
+    return cached_level;
+#else
+    return -1;
+#endif
+}
+
+bool battery_charging() {
+#ifdef CYD_BATTERY_ADC
+    static int      cached       = -1;
+    static uint32_t next_read_ms = 0;
+    uint32_t        now          = millis();
+    if (cached < 0 || now >= next_read_ms) {
+        cached       = (battery_millivolts() > 4250) ? 1 : 0;
+        next_read_ms = now + 1000;
+    }
+    return cached == 1;
+#else
+    return false;
+#endif
+}

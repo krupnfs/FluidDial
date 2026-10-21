@@ -12,11 +12,11 @@ private:
     int       _x;
     int       _width;
     int       _height;
+    int       _gap;
+protected:
+    int       _y;
     fontnum_t _font;
     const int _text_inset = 5;
-
-protected:
-    int _y;
 
     int text_left_x() { return _x + _text_inset; }
     int text_center_x() { return _x + _width / 2; }
@@ -25,12 +25,12 @@ protected:
     int widget_left_x() { return _x; }
 
 public:
-    Stripe(int x, int y, int width, int height, fontnum_t font);
+    Stripe(int x, int y, int width, int height, fontnum_t font, int gap = -1);
     void draw(const char* left, const char* right, bool highlighted, int left_color = WHITE);
     void draw(char left, const char* right, bool highlighted, int left_color = WHITE);
     void draw(const char* center, bool highlighted);
     int  y() { return _y; }
-    int  gap() { return _height + 1; }
+    int  gap() { return _gap > 0 ? _gap : _height + 1; }
     void advance() { _y += gap(); }
 };
 class LED {
@@ -47,7 +47,8 @@ public:
 
 class DRO : public Stripe {
 public:
-    DRO(int x, int y, int width, int height) : Stripe(x, y, width, height, MEDIUM_MONO) {}
+    DRO(int x, int y, int width, int height, fontnum_t font = MEDIUM_MONO, int gap = -1)
+        : Stripe(x, y, width, height, font, gap) {}
     void draw(int axis, bool highlight);
     void draw(int axis, int hl_digit, bool highlight);
     void drawHoming(int axis, bool highlight, bool homed);
@@ -86,6 +87,14 @@ void drawMenuTitle(const char* name);
 
 void drawPngFile(const char* filename, Point xy);
 void drawPngBackground(const char* filename);
+
+#ifdef USE_WIFI
+void drawWiFiSignalBars(int x0, int y_bot);
+#endif
+
+#if defined(USE_M5) || defined(USE_LOVYANGFX)
+void drawBatteryLevel(int x0, int y_bot);
+#endif
 
 void refreshDisplay();
 

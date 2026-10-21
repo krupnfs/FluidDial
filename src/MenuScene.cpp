@@ -1,9 +1,13 @@
 #include "Menu.h"
 #include "PieMenu.h"
+#include "Drawing.h"
 #ifdef USE_WMB_FSS
-#    include "FileMenu.h"
+    #    include "FileMenu.h"
 #endif
 #include "System.h"
+#ifdef USE_WIFI
+#    include "WiFiSetupScene.h"
+#endif
 
 void noop(void* arg) {}
 
@@ -16,6 +20,7 @@ static const char* menu_help_text[] = { "FluidDial",
                                         "Authors: @bdring,@Mitch",
                                         "Bradley,@bDuthieDev,",
                                         "@Design8Studio",
+                                        "WiFi by @Figamore",
                                         NULL };
 
 // PieMenu axisMenu("Axes", buttonRadius);
@@ -67,7 +72,13 @@ IB filesButton("Files", &fileSelectScene, "filestp.png");
 #endif
 
 IB controlButton("Macros", &macroMenu, "macrostp.png");
+#ifdef USE_WIFI
+// WiFi scene replaces About button; will reintroduce display orientation later
+extern WiFiSetupScene wifiSetupScene;
+IB setupButton("Settings", &wifiSetupScene, "abouttp.png");
+#else
 IB setupButton("About", &aboutScene, "abouttp.png");
+#endif
 
 class MenuScene : public PieMenu {
 public:
@@ -94,11 +105,20 @@ public:
     }
     void onEntry(void* arg) {
         PieMenu::onEntry(arg);
+        // Clear button legends when entering menu (menu doesn't use them)
+        drawButtonLegends("", "", "");
         if (state == Disconnected) {
             disableIcons();
         } else {
             enableIcons();
         }
+    }
+    void onTouchClick() override {
+        if (touchIsCenter() && state == Alarm) {
+            push_scene(&statusScene);
+            return;
+        }
+        PieMenu::onTouchClick();
     }
     void onStateChange(state_t old_state) override {
         if (state != Disconnected) {

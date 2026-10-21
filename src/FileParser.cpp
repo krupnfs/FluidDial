@@ -3,7 +3,7 @@
 
 #include "FileParser.h"
 
-#include "Scene.h"  // current_scene->reDisplay()
+#include "Scene.h"  // request_redisplay()
 #include "Menu.h"
 #include "GrblParserC.h"  // send_line()
 #include "HomingScene.h"  // set_axis_homed()
@@ -263,6 +263,12 @@ public:
     void startObject() override { ++_level; }
     void key(const char* key) override {
         _key = key;
+#ifdef FNC_RX_TRACE
+        // Surface every key the preferences listener actually sees, with its
+        // depth-from-listener-perspective, so we can verify the structure
+        // matches what _level == 2 expects.
+        dbg_printf("[prefs] L%d key=%s\n", _level, key);
+#endif
         if (_level < 2) {
             // The only thing we care about is the macros section at level 2
             return;
@@ -328,29 +334,106 @@ void request_json_file(const char* name) {
     parser_needs_reset = true;
 }
 
+// Track which file request is in flight so we can advance the macro
+// chain if FluidNC rejects it with a bare "error:N" (Telnet's terse
+// error form, no JSON wrapper). Without this, a rejection on
+// $File/SendJSON=macrocfg.json never unblocks the chain and the macro
+// menu sits forever on "Reading Macros". Cleared either via the success
+// path (try_next_macro_file from JSON endDocument) or via the failure
+// path (file_request_failed_advance from show_error).
+static JsonListener* s_pending_file_listener = nullptr;
+
+// Cooldown millisecond stamp from the last chain advance. FluidNC over
+// Telnet can emit a bare "error:N" for a failed file request AFTER it
+// has already wrapped that failure in a JSON-status response — by then
+// the chain has advanced to the next file and the stray error byte
+// would falsely advance again. Within this window the second advance
+// is suppressed.
+static uint32_t s_chain_advance_at_ms = 0;
+static constexpr uint32_t CHAIN_ADVANCE_COOLDOWN_MS = 250;
+
 void request_macro_list_wu2() {
-    //    reading_macros = true;
+#ifdef FNC_RX_TRACE
+    dbg_printf("[macro-chain] request macrocfg.json (wu2)\n");
+#endif
+    s_pending_file_listener = &macrocfgListener;
     request_json_file("macrocfg.json");
 }
 void request_macro_list_wu3() {
+#ifdef FNC_RX_TRACE
+    dbg_printf("[macro-chain] request preferences.json (wu3)\n");
+#endif
+    s_pending_file_listener = &preferencesListener;
     request_json_file("preferences.json");
 }
 
 void try_next_macro_file(JsonListener* listener) {
+    s_pending_file_listener = nullptr;
+    s_chain_advance_at_ms   = milliseconds();
     // We use schedule_action to avoid reentering
     // the parser code.
     if (!listener) {
+#ifdef FNC_RX_TRACE
+        dbg_printf("[macro-chain] start -> wu2\n");
+#endif
         schedule_action(request_macro_list_wu2);
         return;
     }
     if (listener == &preferencesListener) {
+#ifdef FNC_RX_TRACE
+        dbg_printf("[macro-chain] preferences exhausted -> No Macros\n");
+#endif
         current_scene->onError("No Macros");
         return;
     }
     if (listener == &macrocfgListener) {
+#ifdef FNC_RX_TRACE
+        dbg_printf("[macro-chain] macrocfg miss -> wu3\n");
+#endif
         schedule_action(request_macro_list_wu3);
     }
 }
+
+// Called from show_error in FluidNCModel.cpp. If a macrocfg.json or
+// preferences.json request is in flight when FluidNC returns a bare
+// error:N (no JSON wrapper), advance the chain as if endDocument had
+// fired with non-ok status. Without this the macro chain hangs forever
+// on the "Reading Macros" screen when Telnet rejects $File/SendJSON.
+//
+// Suppress when json_in_progress(): FluidNC interleaves messages on the
+// wire, so an error:N from a previously-failed request can arrive AFTER
+// the next request's JSON has started streaming. Advancing in that case
+// kills a healthy in-flight document and shows "No Macros" even though
+// the macros are right there in the buffer.
+extern "C" void file_request_failed_advance() {
+    if (json_in_progress()) {
+#ifdef FNC_RX_TRACE
+        dbg_printf("[macro-chain] stale error suppressed (JSON in flight)\n");
+#endif
+        return;
+    }
+    // Suppress stray error bytes that arrive immediately after a
+    // chain advance — they belong to the request we just transitioned
+    // away from, not the one that's now pending.
+    if (s_chain_advance_at_ms != 0 &&
+        (milliseconds() - s_chain_advance_at_ms) < CHAIN_ADVANCE_COOLDOWN_MS) {
+#ifdef FNC_RX_TRACE
+        dbg_printf("[macro-chain] stale error suppressed (advance cooldown)\n");
+#endif
+        return;
+    }
+    JsonListener* l = s_pending_file_listener;
+    if (l) {
+#ifdef FNC_RX_TRACE
+        dbg_printf("[macro-chain] file request failed, advancing from %s\n",
+                   l == &macrocfgListener ? "macrocfg" :
+                   l == &preferencesListener ? "preferences" : "?");
+#endif
+        s_pending_file_listener = nullptr;
+        try_next_macro_file(l);
+    }
+}
+
 void request_macros() {
     try_next_macro_file(nullptr);
 }
@@ -426,7 +509,7 @@ public:
 } fileLinesListener;
 
 bool is_file(const char* str, const char* filename) {
-    char* s = strstr(str, filename);
+    const char* s = strstr(str, filename);
     return s && strlen(s) == strlen(filename);
 }
 
@@ -573,23 +656,82 @@ void request_file_preview(const char* name, int firstline, int nlines) {
     // parser.reset();
 }
 
-void parser_parse_line(const char* line) {
+// ── Streaming JSON receiver ───────────────────────────────────────────────────
+// Large payloads can arrive split across TCP segments (the Telnet RX refill is
+// line-terminated) so GrblParserC delivers them as separate lines to
+// handle_other(). Rather than accumulating the whole document into a std::string
+// (which fragments the heap for big file lists), feed each chunk into the
+// streaming JSON parser as it arrives and track outer-brace depth so we know
+// when a document is complete and when the parser is safe to reset.
+
+static int  s_json_depth  = 0;
+static bool s_json_in_str = false;
+static bool s_json_esc    = false;
+
+bool json_in_progress() {
+    return s_json_depth > 0;
+}
+
+void json_reset_depth() {
+    s_json_depth       = 0;
+    s_json_in_str      = false;
+    s_json_esc         = false;
+    parser_needs_reset = true;
+}
+
+// Feed a chunk into the parser one char at a time, counting outer-brace
+// depth as we go. Tracks string state (incl. backslash escapes) across
+// chunk boundaries so '{' and '}' inside JSON string values — for
+// example a macro action like "G92 Z{z}" — don't inflate the counter
+// and prevent the document from ever returning to depth 0.
+static void parser_feed_line(const char* line) {
     char c;
     while ((c = *line++) != '\0') {
+        if (s_json_esc) {
+            s_json_esc = false;
+        } else if (s_json_in_str) {
+            if (c == '\\') {
+                s_json_esc = true;
+            } else if (c == '"') {
+                s_json_in_str = false;
+            }
+        } else {
+            if (c == '"') {
+                s_json_in_str = true;
+            } else if (c == '{') {
+                s_json_depth++;
+            } else if (c == '}') {
+                if (s_json_depth > 0) {
+                    s_json_depth--;
+                }
+            }
+        }
         parser.parse(c);
     }
 }
 
 extern "C" void handle_json(const char* line) {
-    if (parser_needs_reset) {
+#ifdef FNC_RX_TRACE
+    // Print depth + the leading 60 chars of the chunk so we can SEE the
+    // wire format. Truncated to avoid drowning the monitor on large
+    // documents.
+    size_t len = strlen(line);
+    char   peek[61];
+    size_t pn = len < 60 ? len : 60;
+    memcpy(peek, line, pn);
+    peek[pn] = '\0';
+    dbg_printf("[json] len=%u d=%d | %s%s\n", (unsigned)len, s_json_depth,
+               peek, len > 60 ? "..." : "");
+#endif
+    // Only reset the parser at a document boundary, never mid-stream — a reset
+    // in the middle of a multi-chunk document loses the in-flight state and
+    // the macro list comes back empty.
+    if (parser_needs_reset && s_json_depth == 0) {
         parser_needs_reset = false;
         parser.setListener(pInitialListener);
         parser.reset();
     }
-    parser_parse_line(line);
-
-#define Ack 0xB2
-    fnc_realtime((realtime_cmd_t)Ack);
+    parser_feed_line(line);
 }
 
 std::string wifi_mode;
@@ -618,14 +760,39 @@ void parse_wifi(char* arguments) {
 }
 
 // command is "Mode=STA" - or AP or No Wifi
+//
+// FluidNC re-emits [MSG:Mode=...] periodically as a heartbeat. Forcing a
+// full reDisplay every time hammers the heap (every PNG decode allocates
+// & frees, and the LGFX/pngle allocator fragments over time -> mDNS OOMs
+// after a minute). We now only reDisplay when something the UI shows has
+// actually changed.
 void handle_radio_mode(char* command, char* arguments) {
-    dbg_printf("Mode %s %s\n", command, arguments);
     char* value;
     split(command, &value, '=');
+
+    static std::string last_mode;
+    static std::string last_ssid;
+    static std::string last_connected;
+    static std::string last_ip;
+
     wifi_mode = value;
-    if (strcmp(value, "No Wifi") != 0) {
-        parse_wifi(arguments);
-        current_scene->reDisplay();
+    if (strcmp(value, "No Wifi") == 0) {
+        if (last_mode != wifi_mode) {
+            last_mode = wifi_mode;
+            request_redisplay();
+        }
+        return;
+    }
+
+    parse_wifi(arguments);
+
+    if (last_mode != wifi_mode || last_ssid != wifi_ssid || last_connected != wifi_connected || last_ip != wifi_ip) {
+        last_mode      = wifi_mode;
+        last_ssid      = wifi_ssid;
+        last_connected = wifi_connected;
+        last_ip        = wifi_ip;
+        dbg_printf("Mode %s %s\n", command, arguments);
+        request_redisplay();
     }
 }
 
@@ -634,7 +801,7 @@ extern "C" void handle_msg(char* command, char* arguments) {
         char c;
         while ((c = *arguments++) != '\0') {
             const char* letters = "XYZABCUVW";
-            char*       pos     = strchr(letters, c);
+            const char* pos     = strchr(letters, c);
             if (pos) {
                 set_axis_homed(pos - letters);
             }
@@ -646,7 +813,7 @@ extern "C" void handle_msg(char* command, char* arguments) {
         act_on_state_change();
     }
     if (strcmp(command, "Files changed") == 0) {
-        init_file_list();
+        schedule_action(init_file_list);
     }
     if (strcmp(command, "JSON") == 0) {
         handle_json(arguments);

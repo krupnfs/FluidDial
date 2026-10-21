@@ -7,6 +7,9 @@
 #include "M5GFX.h"
 #include "Drawing.h"
 #include "HardwareM5Dial.hpp"
+#ifdef USE_WIFI
+#    include "WiFiConnection.h"
+#endif
 
 LGFX_Device&       display = M5Dial.Display;
 LGFX_Sprite        canvas(&M5Dial.Display);
@@ -39,7 +42,13 @@ void init_hardware() {
     // at the other end to anything you want and it will still work.
     USBSerial.begin();
 
+#ifdef USE_WIFI
+    if (wifi_use_uart_mode()) {
+        init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
+    }
+#else
     init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
+#endif
 
     // Setup external GPIOs as buttons
     lgfx::gpio::command(lgfx::gpio::command_mode_input_pullup, RED_BUTTON_PIN);
@@ -55,11 +64,24 @@ void init_hardware() {
     touch.setFlickThresh(30);
 }
 
+void reinit_fnc_uart() {
+    init_fnc_uart(FNC_UART_NUM, PND_TX_FNC_RX_PIN, PND_RX_FNC_TX_PIN);
+}
+
 Point sprite_offset { 0, 0 };
+
+extern const char* git_info;
+
+void show_logo() {
+    display.drawPngFile(LittleFS, "/fluid_dial.png", 0, 0, display.width(), display.height(), 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+    display.setFont(&fonts::FreeSansBold9pt7b);
+    display.setTextDatum(datum_t::middle_center);
+    display.setTextColor(TFT_DARKGREY);
+    display.drawString(git_info, display.width() / 2, display.height() - 40);
+}
 
 void base_display() {
     display.clear();
-    display.drawPngFile(LittleFS, "/fluid_dial.png", 0, 0, display.width(), display.height(), 0, 0, 0.0f, 0.0f, datum_t::middle_center);
 }
 
 void next_layout(int delta) {}
@@ -121,6 +143,22 @@ void update_events() {
 
 void ackBeep() {
     speaker.tone(1800, 50);
+}
+
+bool ui_locked(bool redrawButtonsFlag) {
+    return false;
+}
+
+int num_layouts = 1;
+int32_t layout_num = 0;
+void redrawButtons() {}
+
+int battery_level() {
+    return -1;  // M5 Dial does not expose battery measuring circuitry
+}
+
+bool battery_charging() {
+    return false;
 }
 
 #include <driver/rtc_io.h>

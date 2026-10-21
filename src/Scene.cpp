@@ -90,16 +90,30 @@ void dispatch_touch() {
 
     auto t = touch.getDetail();
     if (t.state != last_touch_state) {
+
         last_touch_state = t.state;
         touchX           = t.x - sprite_offset.x;
         touchY           = t.y - sprite_offset.y;
+
+#if LGFX_ESP32_3248S035
+        touchX = abs(touchX-320);
+#endif
+
+
         int delta;
         if (screen_encoder(t.x, t.y, delta) && t.state == m5::touch_state_t::touch) {
             current_scene->onEncoder(delta);
             return;
         }
         int button;
-        if (screen_button_touched(t.state == m5::touch_state_t::touch, t.x, t.y, button)) {
+
+#ifndef LGFX_ESP32_3248S035
+        bool scrBtnTouched = screen_button_touched(t.state == m5::touch_state_t::touch, t.x, t.y, button);
+#else
+        bool scrBtnTouched = screen_button_touched(t.state == m5::touch_state_t::touch, touchX, t.y, button);
+#endif
+
+        if (scrBtnTouched) {
             if (t.state == m5::touch_state_t::touch) {
                 dispatch_button(true, button);
             } else if (t.state == m5::touch_state_t::none) {
@@ -148,6 +162,28 @@ ActionHandler action = nullptr;
 
 void schedule_action(ActionHandler _action) {
     action = _action;
+}
+
+static volatile bool s_redisplay_dirty   = false;
+static uint32_t      s_last_redisplay_ms = 0;
+
+void request_redisplay() {
+    s_redisplay_dirty = true;
+}
+
+void service_redisplay() {
+    if (!s_redisplay_dirty) {
+        return;
+    }
+    uint32_t now = millis();
+    if ((int32_t)(now - s_last_redisplay_ms) < (int32_t)UPDATE_RATE_MS) {
+        return;
+    }
+    s_redisplay_dirty   = false;
+    s_last_redisplay_ms = now;
+    if (current_scene) {
+        current_scene->reDisplay();
+    }
 }
 
 void dispatch_events() {

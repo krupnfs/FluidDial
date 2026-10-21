@@ -21,6 +21,12 @@ enum state_t {
     Disconnected,  // We can't talk to FluidNC
 };
 
+enum class JogFlowControl : uint8_t {
+    Blocking,  // UART: send_jog_line() waits for the response itself
+    Timed,     // Lossy networked (ESP-NOW): bound queued motion by estimated execution time
+    Window,    // Reliable networked (Telnet): bound un-acked $J lines (ok-counting)
+};
+
 // Variables and functions to model the state of the FluidNC controller
 
 extern state_t     state;
@@ -47,7 +53,14 @@ extern uint32_t           mySelectedTool;
 int num_digits();
 
 void send_line(const char* s, int timeout = 2000);
+void send_jog_line(const char* s);  // nonblocking network jog send
 void send_linef(const char* fmt, ...);
+
+JogFlowControl jog_flow_control();
+void send_jog_cancel();
+
+int  jog_window_outstanding();
+void jog_window_reset();
 
 const char* intToCStr(int val);
 const char* axisNumToCStr(int axis);
@@ -56,11 +69,23 @@ char        axisNumToChar(int axis);
 state_t     decode_state_string(const char* state_string);
 const char* decode_error_number(int error_num);
 const char* mode_string();
+bool        alarm_is_homing();
+bool        alarm_is_critical();
 
 bool fnc_is_connected();
 void set_disconnected_state();
 
 void update_rx_time();
+
+// Observe raw FluidNC receive bytes so probe reports can be delivered despite
+// the pinned GrblParser release expecting the wrong separator in [PRB:] lines.
+int observe_fnc_rx(int ch);
+
+// Bounded boot-time probe over UART: discards bootloader noise then sends
+// XON + status-report queries until FluidNC responds, or `budget_ms`
+// elapses. Returns true on response. Bytes read here are discarded, NOT
+// fed to the parser — current_scene may not be set yet at boot time.
+bool pendant_wait_for_fluidnc_ready(uint32_t budget_ms);
 
 extern pos_t toMm(pos_t position);
 extern pos_t fromMm(pos_t position);

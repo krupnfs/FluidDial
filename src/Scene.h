@@ -54,11 +54,15 @@ public:
     virtual void onStateChange(state_t) {}
     virtual void onDROChange() {}
     virtual void onLimitsChange() {}
+    virtual void onProbe(const pos_t* axes, bool success, size_t n_axis) {}
     virtual void onMessage(char* command, char* arguments) {}
     virtual void onEncoder(int delta) {}
+    virtual void onPoll() {}
     virtual void reDisplay() {}
     virtual void onEntry(void* arg = nullptr) {}
     virtual void onExit() {}
+
+    virtual bool showButtons() { return true; }
 
     virtual void onFileLines(int firstline, const std::vector<std::string>& lines) {}
     virtual void onFilesList() {}
@@ -108,6 +112,20 @@ void rotateNumberLoop(T& currentVal, T increment, T min, T max) {
 // avoiding recursion in FileParser.cpp
 typedef void (*ActionHandler)(void);
 void schedule_action(ActionHandler action);
+
+// Coalesced redraw request. Parser callbacks (show_state, show_alarm,
+// show_gcode_modes, handle_msg, set_axis_homed, ...) run inside fnc_poll
+// on the receive path. Calling current_scene->reDisplay() directly from
+// there means every incoming message triggers a full screen redraw —
+// which on the menu scene decodes 7+ PNGs from LittleFS, fragments the
+// heap allocator, and starves WiFi RX / touch handling.
+//
+// Use request_redisplay() instead. It sets a dirty flag; service_redisplay()
+// runs once per main-loop tick (rate-limited to UPDATE_RATE_MS) and issues
+// a single coalesced reDisplay if anything asked for one. Multiple requests
+// in the same tick collapse to one redraw.
+void request_redisplay();
+void service_redisplay();
 
 extern Scene* current_scene;
 
